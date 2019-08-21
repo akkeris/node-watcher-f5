@@ -1,0 +1,29 @@
+version: 2
+jobs:
+  build:
+    working_directory: /app
+    docker:
+      - image: docker:17.05.0-ce-git
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Build application docker image
+          command: |
+            docker build -t node-watcher-f5 .
+      - deploy:
+          name: Push application Docker image
+          command: |
+            if [ "${CIRCLE_BRANCH}" != "release" ]; then
+              if [ "${CIRCLE_PROJECT_USERNAME}" == "akkeris" ]; then 
+                docker login -u $DOCKER_LOGIN -p $DOCKER_PASS
+                docker tag node-watcher-f5 "docker.io/akkeris/node-watcher-f5:${CIRCLE_BRANCH}-${CIRCLE_BUILD_NUM}"
+                docker push "docker.io/akkeris/node-watcher-f5:${CIRCLE_BRANCH}-${CIRCLE_BUILD_NUM}"
+                if [ "${CIRCLE_BRANCH}" == "master" ]; then
+                  docker tag node-watcher-f5 "docker.io/akkeris/node-watcher-f5:release-${CIRCLE_BUILD_NUM}"
+                  docker tag node-watcher-f5 "docker.io/akkeris/node-watcher-f5:latest"
+                  docker push "docker.io/akkeris/node-watcher-f5:latest"
+                  docker push "docker.io/akkeris/node-watcher-f5:release-${CIRCLE_BUILD_NUM}"
+                fi
+              fi
+            fi
