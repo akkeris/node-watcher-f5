@@ -37,10 +37,7 @@ func main() {
 			AppEnvironment: os.Getenv("CLUSTER") + "-watch",
 		})
 	}
-	watchnodes()
-
-}
-func watchnodes() {
+	
 	k8sconfig.CreateConfig()
 	config, err := clientcmd.BuildConfigFromFlags("", "./config")
 	if err != nil {
@@ -87,6 +84,7 @@ func printNodeUpdate(oldobj interface{}, newobj interface{}) {
 	conn, err := net.Dial("udp", os.Getenv("INFLUX_LINE_IP"))
 	if err != nil {
 		fmt.Println("dial error:", err)
+		return
 	}
 	for _, element := range conditions {
 		var value string
@@ -103,8 +101,8 @@ func printNodeUpdate(oldobj interface{}, newobj interface{}) {
 	conn.Close()
 
 }
-func printNodeAdd(obj interface{}) {
 
+func printNodeAdd(obj interface{}) {
 	created := obj.(*corev1.Node).ObjectMeta.CreationTimestamp.Unix()
 	now := v1.Now().Unix()
 	diff := now - created
