@@ -9,7 +9,6 @@ import (
 	"github.com/bitly/go-simplejson"
 	"net/http"
 	"os"
-	vault "github.com/akkeris/vault-client"
 )
 
 type f5creds struct {
@@ -31,11 +30,10 @@ func Startclient() {
 		LoginProviderName string `json:"loginProviderName"`
 	}
 
-	f5secret := os.Getenv("F5_SECRET")
 
-	f5username := vault.GetField(f5secret, "username")
-	f5password := vault.GetField(f5secret, "password")
-	F5url = vault.GetField(f5secret, "url")
+	f5username := os.Getenv("F5_USERNAME")
+	f5password := os.Getenv("F5_PASSWORD")
+	F5url = os.Getenv("F5_URL")
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
