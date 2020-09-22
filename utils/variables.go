@@ -22,6 +22,7 @@ var Defaultmonitorport string
 var Insidemonitorport string
 
 var Unipool string
+var UnipoolInside string
 
 var Client rest.Interface
 
@@ -66,4 +67,5 @@ func Variableinit() {
         Insidemonitorport = os.Getenv("INSIDE_MONITOR_PORT")
 
 	Unipool = os.Getenv("UNIPOOL")
+	UnipoolInside = os.Getenv("UNIPOOL_INSIDE")
 }

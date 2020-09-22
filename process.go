@@ -9,7 +9,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"net"
-	"github.com/stackimpact/stackimpact-go"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	api "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -28,15 +27,6 @@ func main() {
 	cnt = 0
 	utils.Variableinit()
 	utils.Startclient()
-
-	if os.Getenv("PROFILE") == "true" {
-		fmt.Println("Starting profiler...")
-		_ = stackimpact.Start(stackimpact.Options{
-			AgentKey:       os.Getenv("STACKIMPACT"),
-			AppName:        "Node Watcher",
-			AppEnvironment: os.Getenv("CLUSTER") + "-watch",
-		})
-	}
 	
 	k8sconfig.CreateConfig()
 	config, err := clientcmd.BuildConfigFromFlags("", "./config")
@@ -48,32 +38,36 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
-
 	utils.Client = clientset.CoreV1().RESTClient()
-	listWatch := cache.NewListWatchFromClient(
-		utils.Client, "nodes", "",
-		fields.Everything())
 
-	listWatch.ListFunc = func(options api.ListOptions) (runtime.Object, error) {
-		return utils.Client.Get().Resource("nodes").Do().Get()
+	if os.Getenv("RESET_NODEPOOL") == "true" {
+		nodes.AddToUnipool()
+	} else {
+		listWatch := cache.NewListWatchFromClient(
+			utils.Client, "nodes", "",
+			fields.Everything())
+
+		listWatch.ListFunc = func(options api.ListOptions) (runtime.Object, error) {
+			return utils.Client.Get().Resource("nodes").Do().Get()
+		}
+		listWatch.WatchFunc = func(options api.ListOptions) (watch.Interface, error) {
+			return clientset.CoreV1().Nodes().Watch(v1.ListOptions{})
+		}
+
+		store, controller := cache.NewInformer(
+			listWatch, &corev1.Node{},
+			time.Second*0, cache.ResourceEventHandlerFuncs{
+				AddFunc:    printNodeAdd,
+				DeleteFunc: printNodeDelete,
+				UpdateFunc: printNodeUpdate,
+			},
+		)
+		fmt.Println(store.ListKeys())
+
+		fmt.Println("Watching for changes in Nodes....")
+
+		controller.Run(wait.NeverStop)
 	}
-	listWatch.WatchFunc = func(options api.ListOptions) (watch.Interface, error) {
-		return clientset.CoreV1().Nodes().Watch(v1.ListOptions{})
-	}
-
-	store, controller := cache.NewInformer(
-		listWatch, &corev1.Node{},
-		time.Second*0, cache.ResourceEventHandlerFuncs{
-			AddFunc:    printNodeAdd,
-			DeleteFunc: printNodeDelete,
-			UpdateFunc: printNodeUpdate,
-		},
-	)
-	fmt.Println(store.ListKeys())
-
-	fmt.Println("Watching for changes in Nodes....")
-
-	controller.Run(wait.NeverStop)
 
 }
 
@@ -122,7 +116,7 @@ func printNodeAdd(obj interface{}) {
 		fmt.Println(string(jsn))
 		cnt = 1
 		time.Sleep(60 * time.Second)
-		nodes.AddToUnipool(obj.(*corev1.Node))
+		nodes.AddToUnipool()
 	}
 }
 
@@ -141,3 +135,5 @@ func printNodeDelete(obj interface{}) {
 	nodes.RemoveFromUnipool(obj.(*corev1.Node))
 
 }
+
+

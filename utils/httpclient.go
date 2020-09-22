@@ -49,7 +49,7 @@ func Startclient() {
 	creds.LoginProviderName = "tmos"
 	str, err := json.Marshal(creds)
 	if err != nil {
-		fmt.Println("Error preparing request")
+		panic(err)
 	}
 	jsonStr := []byte(string(str))
 	urlStr := F5url + "/mgmt/shared/authn/login"
@@ -58,7 +58,7 @@ func Startclient() {
 	req.Header.Add("Content-Type", "application/json")
 	resp, err := F5Client.Do(req)
 	if err != nil {
-		fmt.Println(err)
+		panic(err)
 	}
 	defer resp.Body.Close()
 	bodyj, _ := simplejson.NewFromReader(resp.Body)
@@ -66,10 +66,10 @@ func Startclient() {
 }
 
 func NewToken() {
-        fmt.Println("Getting new Token")
+    fmt.Println("Getting new Token")
 	str, err := json.Marshal(creds)
 	if err != nil {
-		fmt.Println("Error preparing request")
+		panic(err)
 	}
 	jsonStr := []byte(string(str))
 	urlStr := F5url + "/mgmt/shared/authn/login"
@@ -78,12 +78,12 @@ func NewToken() {
 	req.Header.Add("Content-Type", "application/json")
 	resp, err := F5Client.Do(req)
 	if err != nil {
-		fmt.Println(err)
+		panic(err)
 	}
 	defer resp.Body.Close()
 	bodyj, err := simplejson.NewFromReader(resp.Body)
 	if err != nil {
-		fmt.Println(err)
+		panic(err)
 	}
 	F5token, _ = bodyj.Get("token").Get("token").String()
 }

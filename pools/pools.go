@@ -10,9 +10,8 @@ import (
 	"strings"
 )
 
-func ResetUnipool(partition string, nodes []structs.Node, monitor string, unipoolport string) {
-
-	poolname := "/" + partition + "/" + utils.Unipool
+func ResetUnipool(partition string, nodes []structs.Node, unipool string, monitor string, unipoolport string) {
+	poolname := "/" + partition + "/" + unipool
 	fixed := strings.Replace(poolname, "/", "~", -1)
 	var memberlist structs.Memberlist
 	var memberlistmembers []structs.Memberlistmember
@@ -25,22 +24,21 @@ func ResetUnipool(partition string, nodes []structs.Node, monitor string, unipoo
 	memberlist.Members = memberlistmembers
 	_, err := json.MarshalIndent(&memberlist, "", "  ")
 	if err != nil {
-		fmt.Println("error:", err)
+		panic(err)
 	}
 	fmt.Println("Updating " + poolname)
 	urlStr := utils.F5url + "/mgmt/tm/ltm/pool/" + fixed
 	str, err := json.Marshal(memberlist)
 	if err != nil {
-		fmt.Println("Error preparing request")
+		panic(err)
 	}
 	jsonStr := []byte(string(str))
 	req, _ := http.NewRequest("PUT", urlStr, bytes.NewBuffer(jsonStr))
 	req.Header.Add("X-F5-Auth-Token", utils.F5token)
 	req.Header.Add("Content-Type", "application/json")
-	resp, err := utils.F5Client.Do(req)
-	fmt.Println("Replace pool: " + resp.Status)
-	if err != nil {
-		fmt.Println(err)
+	
+	if _, err = utils.F5Client.Do(req); err != nil {
+		panic(err)
 	}
 
 }
