@@ -16,3 +16,4 @@ postcheck
 rmnodes.sh
 tmp/
 node-watcher-f5
+.env*

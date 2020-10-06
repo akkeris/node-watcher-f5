@@ -5,8 +5,9 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/bitly/go-simplejson"
+	"io/ioutil"
 	"net/http"
 	"os"
 )
@@ -17,71 +18,58 @@ type f5creds struct {
 	LoginProviderName string `json:"loginProviderName"`
 }
 
+type F5AuthResponse struct {
+	Token struct {
+		Token string `json:"token"`
+	} `json:"token"`
+}
+
 var F5Client *http.Client
 var F5url string
 var F5token string
 var creds f5creds
 var f5auth string
 
-func Startclient() {
-	type f5creds struct {
-		Username          string `json:"username"`
-		Password          string `json:"password"`
-		LoginProviderName string `json:"loginProviderName"`
+func NewToken() {
+	fmt.Println("[httpclient] Getting new token")
+	payload, err := json.Marshal(creds)
+	if err != nil {
+		panic(err)
 	}
+	req, err := http.NewRequest("POST", F5url+"/mgmt/shared/authn/login", bytes.NewBuffer(payload))
+	if err != nil {
+		panic(err)
+	}
+	req.Header.Add("Authorization", f5auth)
+	req.Header.Add("Content-Type", "application/json")
+	resp, err := F5Client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+	var auth F5AuthResponse
+	body, _ := ioutil.ReadAll(resp.Body)
+	if err := json.Unmarshal(body, &auth); err != nil {
+		panic(err)
+	}
+	if resp.StatusCode > 299 {
+		panic(errors.New(string(body)))
+	}
+	F5token = auth.Token.Token
+}
 
-
+func Startclient() {
 	f5username := os.Getenv("F5_USERNAME")
 	f5password := os.Getenv("F5_PASSWORD")
 	F5url = os.Getenv("F5_URL")
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	F5Client = &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
 	}
-	F5Client = &http.Client{Transport: tr}
-	data := []byte(f5username + ":" + f5password)
-	dstr := base64.StdEncoding.EncodeToString(data)
-	f5auth = "Basic " + dstr
-
+	f5auth = "Basic " + base64.StdEncoding.EncodeToString([]byte(f5username+":"+f5password))
 	creds.Username = f5username
 	creds.Password = f5password
 	creds.LoginProviderName = "tmos"
-	str, err := json.Marshal(creds)
-	if err != nil {
-		fmt.Println("Error preparing request")
-	}
-	jsonStr := []byte(string(str))
-	urlStr := F5url + "/mgmt/shared/authn/login"
-	req, err := http.NewRequest("POST", urlStr, bytes.NewBuffer(jsonStr))
-	req.Header.Add("Authorization", f5auth)
-	req.Header.Add("Content-Type", "application/json")
-	resp, err := F5Client.Do(req)
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer resp.Body.Close()
-	bodyj, _ := simplejson.NewFromReader(resp.Body)
-	F5token, _ = bodyj.Get("token").Get("token").String()
-}
-
-func NewToken() {
-        fmt.Println("Getting new Token")
-	str, err := json.Marshal(creds)
-	if err != nil {
-		fmt.Println("Error preparing request")
-	}
-	jsonStr := []byte(string(str))
-	urlStr := F5url + "/mgmt/shared/authn/login"
-	req, err := http.NewRequest("POST", urlStr, bytes.NewBuffer(jsonStr))
-	req.Header.Add("Authorization", f5auth)
-	req.Header.Add("Content-Type", "application/json")
-	resp, err := F5Client.Do(req)
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer resp.Body.Close()
-	bodyj, err := simplejson.NewFromReader(resp.Body)
-	if err != nil {
-		fmt.Println(err)
-	}
-	F5token, _ = bodyj.Get("token").Get("token").String()
+	NewToken()
 }
