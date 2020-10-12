@@ -77,15 +77,19 @@ func findIpFromKubernetesNode(kubeNode *corev1.Node) (*string, error) {
 func RemoveNodeFromF5(clientset *kubernetes.Interface, kubeNode *corev1.Node, partition string, poolName string, monitorName string, monitorPort string) {
 	uidparts := strings.Split(fmt.Sprintf("%v", kubeNode.ObjectMeta.UID), "-")
 	nodeName := "uid" + uidparts[0]
+	fmt.Printf("[actions] Received request to remove node: /%s/%s\n", partition, nodeName)
 
 	utils.NewToken()
 	nodes := GetNodesFromF5(partition)
 	newNodes := make([]Node, 0)
 	var nodeFound *Node = nil
 	for _, node := range nodes.Items {
+		fmt.Printf("[actions] Comparing \"%s\" == \"%s\" to see if it matches to remove /%s/%s\n", node.Name, nodeName, partition, nodeName)
 		if node.Name == nodeName {
+			fmt.Printf("[actions] Not adding %s\n", node.Name)
 			nodeFound = &node
 		} else {
+			fmt.Printf("[actions] Adding %s\n", node.Name)
 			newNodes = append(newNodes, node)
 		}
 	}
@@ -98,15 +102,18 @@ func RemoveNodeFromF5(clientset *kubernetes.Interface, kubeNode *corev1.Node, pa
 func AddNodeToF5(clientset *kubernetes.Interface, kubeNode *corev1.Node, partition string, poolName string, monitorName string, monitorPort string) {
 	uidparts := strings.Split(fmt.Sprintf("%v", kubeNode.ObjectMeta.UID), "-")
 	nodeName := "uid" + uidparts[0]
+	fmt.Printf("[actions] Received request to add node: /%s/%s\n", partition, nodeName)
 
 	// If the node is unschedulable do not add it to the pool list.
 	if kubeNode.Spec.Unschedulable == true {
+		fmt.Printf("[actions] Not adding node as its marked as unschedulable: /%s/%s\n", partition, nodeName)
 		return
 	}
 
 	// The worker node annotation must be present otherwise we shouldnt
 	// route to it.
 	if kubeNode.Labels == nil || kubeNode.Labels[workerLabelName] != "true" {
+		fmt.Printf("[actions] Not adding node as its not a worker node: /%s/%s\n", partition, nodeName)
 		return
 	}
 
@@ -140,6 +147,7 @@ func ResyncNodes(clientset *kubernetes.Interface, partition string, poolName str
 	kubeNodes := GetNodesFromKubernetes(clientset, partition)
 	f5NodesToRemove := make([]Node, 0)
 	newF5Nodes := make([]Node, 0)
+	var dirty = false
 	// Find nodes that need to be removed
 	for _, f5Node := range f5Nodes.Items {
 		var found = false
@@ -152,6 +160,7 @@ func ResyncNodes(clientset *kubernetes.Interface, partition string, poolName str
 		if found == false {
 			// We'll need to update the pools at a later time then
 			// we can try and remove the node.
+			dirty = true
 			f5NodesToRemove = append(f5NodesToRemove, f5Node)
 		}
 	}
@@ -164,20 +173,23 @@ func ResyncNodes(clientset *kubernetes.Interface, partition string, poolName str
 			}
 		}
 		if found == false {
+			dirty = true
 			fmt.Printf("[actions] Adding node: %s (%s)\n", kubeNode.Name, kubeNode.Address)
 			CreateNodeOnF5(kubeNode)
 			newF5Nodes = append(newF5Nodes, kubeNode)
 		}
 	}
 
-	UpdatePool(partition, newF5Nodes, poolName, monitorName, monitorPort)
+	if dirty == true {
+		UpdatePool(partition, newF5Nodes, poolName, monitorName, monitorPort)
+	}
+
 
 	if len(f5NodesToRemove) != 0 {
 		for _, f5Node := range f5NodesToRemove {
 			fmt.Printf("[actions] Removing node: /%s/%s (%s)\n", partition, f5Node.Name, f5Node.Address)
 			DeleteNodeOnF5(partition, f5Node.Name)
 		}
-
 	}
 }
 
