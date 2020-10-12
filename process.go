@@ -93,8 +93,10 @@ func main() {
 	}
 
 	_, controller := cache.NewInformer(
-		listWatch, &corev1.Node{},
-		time.Second*0, cache.ResourceEventHandlerFuncs{
+		listWatch, 
+		&corev1.Node{},
+		time.Second*0, 
+		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				// Ingore any node "adds" where the node is more than five minutes old.
 				if (v1.Now().Unix() - obj.(*corev1.Node).ObjectMeta.CreationTimestamp.Unix()) <= 300 {
