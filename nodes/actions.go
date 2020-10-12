@@ -65,6 +65,19 @@ type Memberlistmember struct {
 
 const workerLabelName = "node-role.kubernetes.io/worker"
 
+
+func IsWorkerNode(kubeNode *corev1.Node) bool {
+	if kubeNode == nil || kubeNode.Labels == nil {
+		return false
+	}
+	for name, value := range kubeNode.Labels {
+		if name == "node-role.kubernetes.io/worker" && value == "true" {
+			return true
+		}
+	}
+	return false
+}
+
 func findIpFromKubernetesNode(kubeNode *corev1.Node) (*string, error) {
 	for _, address := range kubeNode.Status.Addresses {
 		if address.Type == "InternalIP" {
@@ -78,6 +91,11 @@ func RemoveNodeFromF5(clientset *kubernetes.Interface, kubeNode *corev1.Node, pa
 	uidparts := strings.Split(fmt.Sprintf("%v", kubeNode.ObjectMeta.UID), "-")
 	nodeName := "uid" + uidparts[0]
 	fmt.Printf("[actions] Received request to remove node: /%s/%s\n", partition, nodeName)
+
+	if IsWorkerNode(kubeNode) == false {
+		fmt.Printf("[actions] Not removing node as its not a worker node.\n")
+		return
+	}
 
 	utils.NewToken()
 	nodes := GetNodesFromF5(partition)
@@ -106,14 +124,14 @@ func AddNodeToF5(clientset *kubernetes.Interface, kubeNode *corev1.Node, partiti
 
 	// If the node is unschedulable do not add it to the pool list.
 	if kubeNode.Spec.Unschedulable == true {
-		fmt.Printf("[actions] Not adding node as its marked as unschedulable: /%s/%s\n", partition, nodeName)
+		fmt.Printf("[actions] Not adding node as its marked as unschedulable: /%s/%s (%#+v)\n", partition, nodeName, kubeNode)
 		return
 	}
 
 	// The worker node annotation must be present otherwise we shouldnt
 	// route to it.
-	if kubeNode.Labels == nil || kubeNode.Labels[workerLabelName] != "true" {
-		fmt.Printf("[actions] Not adding node as its not a worker node: /%s/%s\n", partition, nodeName)
+	if IsWorkerNode(kubeNode) == false {
+		fmt.Printf("[actions] Not adding node as its not a worker node: /%s/%s (%#+v)\n", partition, nodeName, kubeNode)
 		return
 	}
 
