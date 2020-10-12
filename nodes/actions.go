@@ -63,9 +63,6 @@ type Memberlistmember struct {
 	Monitor string `json:"monitor"`
 }
 
-const workerLabelName = "node-role.kubernetes.io/worker"
-
-
 func IsWorkerNode(kubeNode *corev1.Node) bool {
 	if kubeNode == nil || kubeNode.Labels == nil {
 		return false
@@ -91,73 +88,14 @@ func RemoveNodeFromF5(clientset *kubernetes.Interface, kubeNode *corev1.Node, pa
 	uidparts := strings.Split(fmt.Sprintf("%v", kubeNode.ObjectMeta.UID), "-")
 	nodeName := "uid" + uidparts[0]
 	fmt.Printf("[actions] Received request to remove node: /%s/%s\n", partition, nodeName)
-
-	if IsWorkerNode(kubeNode) == false {
-		fmt.Printf("[actions] Not removing node as its not a worker node.\n")
-		return
-	}
-
-	utils.NewToken()
-	nodes := GetNodesFromF5(partition)
-	newNodes := make([]Node, 0)
-	var nodeFound *Node = nil
-	for _, node := range nodes.Items {
-		fmt.Printf("[actions] Comparing \"%s\" == \"%s\" to see if it matches to remove /%s/%s\n", node.Name, nodeName, partition, nodeName)
-		if node.Name == nodeName {
-			fmt.Printf("[actions] Not adding %s\n", node.Name)
-			nodeFound = &node
-		} else {
-			fmt.Printf("[actions] Adding %s\n", node.Name)
-			newNodes = append(newNodes, node)
-		}
-	}
-	UpdatePool(partition, newNodes, poolName, monitorName, monitorPort)
-	if nodeFound != nil {
-		DeleteNodeOnF5(partition, nodeFound.Name)
-	}
+	ResyncNodes(clientset, partition, poolName, monitorName, monitorPort)
 }
 
 func AddNodeToF5(clientset *kubernetes.Interface, kubeNode *corev1.Node, partition string, poolName string, monitorName string, monitorPort string) {
 	uidparts := strings.Split(fmt.Sprintf("%v", kubeNode.ObjectMeta.UID), "-")
 	nodeName := "uid" + uidparts[0]
 	fmt.Printf("[actions] Received request to add node: /%s/%s\n", partition, nodeName)
-
-	// If the node is unschedulable do not add it to the pool list.
-	if kubeNode.Spec.Unschedulable == true {
-		fmt.Printf("[actions] Not adding node as its marked as unschedulable: /%s/%s (%#+v)\n", partition, nodeName, kubeNode)
-		return
-	}
-
-	// The worker node annotation must be present otherwise we shouldnt
-	// route to it.
-	if IsWorkerNode(kubeNode) == false {
-		fmt.Printf("[actions] Not adding node as its not a worker node: /%s/%s (%#+v)\n", partition, nodeName, kubeNode)
-		return
-	}
-
-	utils.NewToken()
-	nodes := GetNodesFromF5(partition)
-	newNodes := make([]Node, 0)
-	var nodeFound = false
-	for _, node := range nodes.Items {
-		newNodes = append(newNodes, node)
-		if node.Name == nodeName {
-			nodeFound = true
-		}
-	}
-	if nodeFound == false {
-		ip, err := findIpFromKubernetesNode(kubeNode)
-		if err == nil && ip != nil {
-			var node Node = Node{
-				Name:      nodeName,
-				Partition: partition,
-				Address:   *ip,
-			}
-			CreateNodeOnF5(node)
-			newNodes = append(newNodes, node)
-		}
-	}
-	UpdatePool(partition, newNodes, poolName, monitorName, monitorPort)
+	ResyncNodes(clientset, partition, poolName, monitorName, monitorPort)
 }
 
 func ResyncNodes(clientset *kubernetes.Interface, partition string, poolName string, monitorName string, monitorPort string) {
