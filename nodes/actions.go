@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	utils "github.com/akkeris/node-watcher-f5/utils"
 	"io/ioutil"
+	"net/http"
+	"os"
+	"strings"
+
+	utils "github.com/akkeris/node-watcher-f5/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
-	"net/http"
-	"strings"
 )
 
 type Node struct {
@@ -63,6 +65,15 @@ type Memberlistmember struct {
 	Monitor string `json:"monitor"`
 }
 
+func getNodePrefix() string {
+	prefix, ok := os.LookupEnv("NODE_PREFIX")
+	if !ok || prefix == "" {
+		return "uid"
+	} else {
+		return prefix
+	}
+}
+
 func IsWorkerNode(kubeNode *corev1.Node) bool {
 	if kubeNode == nil || kubeNode.Labels == nil {
 		return false
@@ -86,14 +97,14 @@ func findIpFromKubernetesNode(kubeNode *corev1.Node) (*string, error) {
 
 func RemoveNodeFromF5(clientset *kubernetes.Interface, kubeNode *corev1.Node, partition string, poolName string, monitorName string, monitorPort string) {
 	uidparts := strings.Split(fmt.Sprintf("%v", kubeNode.ObjectMeta.UID), "-")
-	nodeName := "uid" + uidparts[0]
+	nodeName := getNodePrefix() + uidparts[0]
 	fmt.Printf("[actions] Received request to remove node: /%s/%s\n", partition, nodeName)
 	ResyncNodes(clientset, partition, poolName, monitorName, monitorPort)
 }
 
 func AddNodeToF5(clientset *kubernetes.Interface, kubeNode *corev1.Node, partition string, poolName string, monitorName string, monitorPort string) {
 	uidparts := strings.Split(fmt.Sprintf("%v", kubeNode.ObjectMeta.UID), "-")
-	nodeName := "uid" + uidparts[0]
+	nodeName := getNodePrefix() + uidparts[0]
 	fmt.Printf("[actions] Received request to add node: /%s/%s\n", partition, nodeName)
 	ResyncNodes(clientset, partition, poolName, monitorName, monitorPort)
 }
@@ -139,7 +150,6 @@ func ResyncNodes(clientset *kubernetes.Interface, partition string, poolName str
 	if dirty == true {
 		UpdatePool(partition, newF5Nodes, poolName, monitorName, monitorPort)
 	}
-
 
 	if len(f5NodesToRemove) != 0 {
 		for _, f5Node := range f5NodesToRemove {
@@ -202,7 +212,7 @@ func GetNodesFromKubernetes(clientset *kubernetes.Interface, partition string) [
 					ip := element.Status.Addresses[0].Address
 					uidparts := strings.Split(fmt.Sprintf("%v", element.ObjectMeta.UID), "-")
 					nodesids = append(nodesids, Node{
-						Name:      "uid" + uidparts[0],
+						Name:      getNodePrefix() + uidparts[0],
 						Partition: partition,
 						Address:   ip,
 					})
@@ -235,7 +245,7 @@ func GetNodesFromF5(partition string) NodeList {
 	}
 	newNodes := make([]Node, 0)
 	for _, node := range nodes.Items {
-		if strings.HasPrefix(node.Name, "uid") {
+		if strings.HasPrefix(node.Name, getNodePrefix()) {
 			newNodes = append(newNodes, node)
 		}
 	}
